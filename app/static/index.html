@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>智能视频监控平台</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
+    <script src="https://unpkg.com/element-plus"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <style>
+        body { margin: 0; background-color: #f0f2f5; font-family: sans-serif; }
+        .layout { display: flex; height: 100vh; }
+        .sidebar { width: 220px; background-color: #304156; color: white; }
+        .logo { height: 60px; line-height: 60px; text-align: center; font-size: 18px; font-weight: bold; border-bottom: 1px solid #1f2d3d; }
+        .main-content { flex: 1; padding: 20px; overflow-y: auto; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 12px 0 rgba(0,0,0,0.1); margin-bottom: 20px;}
+        .header { font-size: 24px; font-weight: bold; margin-bottom: 20px; color: #303133;}
+        .video-box { width: 100%; max-width: 800px; border-radius: 4px; margin-top: 15px; }
+        .stat-card { text-align: center; padding: 20px; border-radius: 8px; color: white; }
+        .stat-card h2 { font-size: 36px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div id="app" class="layout">
+        <!-- 左侧导航栏 -->
+        <div class="sidebar">
+            <div class="logo">🛡️ 智能监控平台</div>
+            <el-menu
+                active-text-color="#ffd04b"
+                background-color="#304156"
+                text-color="#bfcbd9"
+                v-model="currentView"
+                style="border-right: none;"
+            >
+                <el-menu-item index="overview">📊 数据总览</el-menu-item>
+                <el-menu-item index="detect">📹 视频检测</el-menu-item>
+                <el-menu-item index="alarms">🚨 告警中心</el-menu-item>
+            </el-menu>
+        </div>
+
+        <!-- 右侧内容区 -->
+        <div class="main-content">
+
+            <!-- 页面 1：数据总览 -->
+            <div v-if="currentView === 'overview'">
+                <div class="header">数据总览</div>
+                <el-row :gutter="20">
+                    <el-col :span="8">
+                        <div class="stat-card" style="background-color: #409EFF;">
+                            <div>累计处理视频</div>
+                            <h2>{{ overviewStats.total_videos }}</h2>
+                        </div>
+                    </el-col>
+                    <el-col :span="8">
+                        <div class="stat-card" style="background-color: #F56C6C;">
+                            <div>累计告警次数</div>
+                            <h2>{{ overviewStats.total_alarms }}</h2>
+                        </div>
+                    </el-col>
+                    <el-col :span="8">
+                        <div class="stat-card" style="background-color: #67C23A;">
+                            <div>历史最高客流（人）</div>
+                            <h2>{{ overviewStats.max_persons }}</h2>
+                        </div>
+                    </el-col>
+                </el-row>
+                <div class="card" style="margin-top: 20px; text-align: center; color: #909399;">
+                    <h3>（统计分析图表、客流趋势折线图 待开发...）</h3>
+                </div>
+            </div>
+
+            <!-- 页面 2：视频检测 -->
+            <div v-if="currentView === 'detect'">
+                <div class="header">视频检测</div>
+                <div class="card">
+                    <el-upload
+                        drag action="" :auto-upload="false" :show-file-list="false" :on-change="handleFileChange">
+                        <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+                        <div class="el-upload__text">将视频拖到此处，或 <em>点击上传</em></div>
+                    </el-upload>
+
+                    <el-button v-if="selectedFile" type="primary" style="margin-top: 15px;" @click="uploadVideo" :loading="uploading">
+                        {{ uploading ? '正在上传与处理中...' : '开始分析：' + selectedFile.name }}
+                    </el-button>
+
+                    <el-progress v-if="processing" :percentage="100" :indeterminate="true" status="warning" style="margin-top: 20px;"></el-progress>
+                </div>
+
+                <div class="card" v-if="videoUrl">
+                    <h3>处理结果</h3>
+                    <el-alert title="视频处理完成！" type="success" show-icon style="margin-bottom: 15px;"></el-alert>
+                    <video :src="videoUrl" controls class="video-box"></video>
+                </div>
+            </div>
+
+            <!-- 页面 3：告警中心 -->
+            <div v-if="currentView === 'alarms'">
+                <div class="header">告警中心</div>
+                <div class="card">
+                    <el-button type="primary" size="small" @click="loadAlarms" icon="Refresh" style="margin-bottom: 15px;">刷新数据</el-button>
+                    <el-table :data="alarms" style="width: 100%" stripe v-loading="loadingAlarms">
+                        <el-table-column prop="id" label="告警ID" width="80"></el-table-column>
+                        <el-table-column prop="task_id" label="任务ID" width="120"></el-table-column>
+                        <el-table-column label="时间点" width="120">
+                            <template #default="scope">{{ scope.row.time_sec }} 秒</template>
+                        </el-table-column>
+                        <el-table-column label="现场截图" width="150">
+                            <template #default="scope">
+                                <el-image
+                                    style="width: 100px; height: 60px"
+                                    :src="getImgUrl(scope.row.snapshot_url)"
+                                    :preview-src-list="[getImgUrl(scope.row.snapshot_url)]">
+                                </el-image>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="created_at" label="发生时间"></el-table-column>
+                    </el-table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+        const { ElMessage } = ElementPlus;
+
+        createApp({
+            setup() {
+                // 控制当前显示哪个页面
+                const currentView = ref('overview');
+
+                // 总览数据
+                const overviewStats = ref({ total_videos: 0, total_alarms: 0, max_persons: 0 });
+
+                // 视频检测相关
+                const selectedFile = ref(null);
+                const uploading = ref(false);
+                const processing = ref(false);
+                const videoUrl = ref('');
+
+                // 告警列表相关
+                const alarms = ref([]);
+                const loadingAlarms = ref(false);
+
+                // 获取总览数据
+                const loadOverview = async () => {
+                    try {
+                        const res = await axios.get('/api/stats/overview');
+                        overviewStats.value = res.data;
+                    } catch(e) { console.error(e); }
+                };
+
+                // 加载告警
+                const loadAlarms = async () => {
+                    loadingAlarms.value = true;
+                    try {
+                        const res = await axios.get('/api/alarms');
+                        alarms.value = res.data.data;
+                    } finally {
+                        loadingAlarms.value = false;
+                    }
+                };
+
+                const handleFileChange = (file) => { selectedFile.value = file.raw; };
+
+                const uploadVideo = async () => {
+                    if (!selectedFile.value) return;
+                    uploading.value = true;
+                    videoUrl.value = '';
+                    const formData = new FormData();
+                    formData.append('file', selectedFile.value);
+
+                    try {
+                        const res = await axios.post('/api/upload', formData);
+                        const taskId = res.data.task_id;
+                        ElMessage.success('上传成功，后台正在分析...');
+                        processing.value = true;
+                        checkStatus(taskId);
+                    } catch (error) {
+                        ElMessage.error('上传失败');
+                        uploading.value = false;
+                    }
+                };
+
+                const checkStatus = (taskId) => {
+                    const timer = setInterval(async () => {
+                        try {
+                            const res = await axios.get(`/api/status/${taskId}`);
+                            if (res.data.status === 'completed') {
+                                clearInterval(timer);
+                                processing.value = false;
+                                uploading.value = false;
+                                videoUrl.value = res.data.video_url;
+                                ElMessage.success('分析完成！');
+                                loadOverview(); // 刷新总览数据
+                                loadAlarms();   // 刷新告警
+                            }
+                        } catch(e) {}
+                    }, 3000);
+                };
+
+                const getImgUrl = (path) => path ? `http://127.0.0.1:8000${path}` : '';
+
+                // 初始化加载所有数据
+                onMounted(() => {
+                    loadOverview();
+                    loadAlarms();
+                });
+
+                return {
+                    currentView, overviewStats,
+                    selectedFile, uploading, processing, videoUrl,
+                    alarms, loadingAlarms,
+                    handleFileChange, uploadVideo, loadAlarms, getImgUrl
+                };
+            }
+        }).use(ElementPlus).mount('#app');
+    </script>
+</body>
+</html>

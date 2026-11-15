@@ -1,0 +1,36 @@
+# ===== 通用 =====
+.DS_Store
+*.log
+
+# ===== Python / 后端 =====
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 数据库文件（按需选择，如果不想上传测试数据）
+# data/monitor.db
+
+# ===== Node.js / Vue 前端 =====
+# 依赖
+node_modules/
+
+# 构建输出
+dist/
+.output/
+
+# ===== 项目特有 =====
+# 模型权重文件（体积大，不建议直接上传）
+weights/*.pt
+
+# 上传的测试视频和图片（体积大）
+data/*.mp4
+data/*.avi
+data/*.jpg
+outputs/
